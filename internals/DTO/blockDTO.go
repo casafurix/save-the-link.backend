@@ -1,7 +1,8 @@
 package dto
 
 type CreateBlockDTO struct {
-	URL string `json:"url" binding:"required"`
+	URL            string `json:"url" binding:"required"`
+	AllowDuplicate bool   `json:"allowDuplicate"`
 }
 
 type UpdateBlockDTO struct {

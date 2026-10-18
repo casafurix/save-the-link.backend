@@ -58,6 +58,11 @@ func (c *BlockController) respondWithError(ctx *gin.Context, err error) {
 		ctx.AbortWithStatusJSON(http.StatusForbidden, gin.H{"message": err.Error()})
 	case errors.Is(err, customerrors.ErrorInvalidBlock), errors.Is(err, customerrors.ErrorInvalidPage):
 		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	case errors.Is(err, customerrors.ErrorDuplicateURL):
+		ctx.AbortWithStatusJSON(http.StatusConflict, gin.H{
+			"code":    "duplicate_url",
+			"message": err.Error(),
+		})
 	default:
 		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"message": fmt.Sprintf("%v", err),
@@ -76,7 +81,7 @@ func (c *BlockController) CreateBlock(ctx *gin.Context) {
 		return
 	}
 
-	block, err := c.blockService.CreateBlock(ctx.Request.Context(), pageId, ownerId, body.URL)
+	block, err := c.blockService.CreateBlock(ctx.Request.Context(), pageId, ownerId, body.URL, body.AllowDuplicate)
 
 	if err != nil {
 		c.respondWithError(ctx, err)
