@@ -134,12 +134,23 @@ later, with no need to re-find the original share link:
 
 ### Backend
 
+`compose.yaml` is for local development only. Production uses an externally
+managed MongoDB and process environment variables; it does not use this Compose
+stack.
+
 ```bash
 cd ../save-the-link.backend
 cp .env.sample .env
 # Set mongo_connection_string=mongodb://mongo:27017 and choose a local jwt_secret.
 docker compose up --build
 ```
+
+Workspace imports are append-only, and imported pages are always private and
+unshared. The complete archive is validated before any writes. Imports do not use
+MongoDB transactions so local development can keep using standalone MongoDB;
+known imported page IDs are removed on a write failure. Cleanup is best-effort,
+so an outage that also prevents the compensating deletes can still require manual
+cleanup before retrying.
 
 ### Frontend
 

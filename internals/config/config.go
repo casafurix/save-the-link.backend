@@ -14,6 +14,7 @@ type Config struct {
 	Mongo_db_connection_string string
 	JWT_secret                 string
 	AllowedOrigins             []string
+	Port                       string
 }
 
 func GetConfig() *Config {
@@ -23,12 +24,18 @@ func GetConfig() *Config {
 		log.Println("No .env file found — reading configuration from the environment instead")
 	}
 
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
+		port = "8080"
+	}
+
 	return &Config{
 		Mongo_db_username:          os.Getenv("mongo_db_username"),
 		Mongo_db_password:          os.Getenv("mongo_db_password"),
 		Mongo_db_connection_string: os.Getenv("mongo_connection_string"),
 		JWT_secret:                 os.Getenv("jwt_secret"),
 		AllowedOrigins:             parseOrigins(os.Getenv("allowed_origins")),
+		Port:                       port,
 	}
 }
 

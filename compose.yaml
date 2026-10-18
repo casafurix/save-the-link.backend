@@ -1,3 +1,5 @@
+# Local development only. Production configuration and MongoDB are supplied
+# through environment variables by the deployment platform.
 services:
   mongo:
     image: mongo:8.0

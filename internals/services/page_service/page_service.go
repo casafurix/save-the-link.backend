@@ -176,6 +176,12 @@ func (s *PageService) ListPublicPages(limit int64) ([]repository.PublicPageSumma
 // than erroring the whole request) and stores the result as the page's
 // invite-only collaborator list.
 func (s *PageService) SetCollaborators(id string, ownerId string, emails []string) (*mongomodels.PageMongo, []string, error) {
+	// Authorize before looking up any submitted addresses so a non-owner cannot
+	// use this endpoint to probe which users are registered.
+	if _, err := s.pageRepository.GetPageById(id, ownerId); err != nil {
+		return nil, nil, err
+	}
+
 	ids := make([]bson.ObjectID, 0, len(emails))
 	resolvedEmails := make([]string, 0, len(emails))
 	var notFound []string

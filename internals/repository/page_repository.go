@@ -80,6 +80,26 @@ func (p *PageRepository) CreatePage(ownerId string, title string, parentPageId *
 	return page, nil
 }
 
+func (p *PageRepository) InsertImportedPages(pages []mongomodels.PageMongo) error {
+	if len(pages) == 0 {
+		return nil
+	}
+	documents := make([]any, len(pages))
+	for i := range pages {
+		documents[i] = pages[i]
+	}
+	_, err := p.collection().InsertMany(p.ctx, documents)
+	return err
+}
+
+func (p *PageRepository) DeletePagesByIds(ids []bson.ObjectID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := p.collection().DeleteMany(p.ctx, bson.M{"_id": bson.M{"$in": ids}})
+	return err
+}
+
 func (p *PageRepository) GetPagesByOwner(ownerId string) ([]mongomodels.PageMongo, error) {
 	ownerObjectId, err := bson.ObjectIDFromHex(ownerId)
 
