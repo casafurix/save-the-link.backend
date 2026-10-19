@@ -162,8 +162,33 @@ func (s *PageService) UnpublishPage(id string, ownerId string) (*mongomodels.Pag
 	return s.pageRepository.UpdatePage(id, ownerId, updates)
 }
 
+type PublicPage struct {
+	Page            *mongomodels.PageMongo
+	CreatorUsername string
+}
+
 func (s *PageService) GetPublicPage(slug string) (*mongomodels.PageMongo, error) {
 	return s.pageRepository.GetPublicPageBySlug(slug)
+}
+
+func (s *PageService) GetPublicPageWithCreator(slug string) (*PublicPage, error) {
+	page, err := s.pageRepository.GetPublicPageBySlug(slug)
+
+	if err != nil {
+		return nil, err
+	}
+
+	creatorUsername, err := s.userRepository.FindUsernameById(page.OwnerId.Hex())
+
+	if err != nil && !errors.Is(err, customerrors.ErrorUserNotFound) {
+		return nil, err
+	}
+
+	if errors.Is(err, customerrors.ErrorUserNotFound) || creatorUsername == "" {
+		creatorUsername = repository.UnknownCreatorUsername
+	}
+
+	return &PublicPage{Page: page, CreatorUsername: creatorUsername}, nil
 }
 
 func (s *PageService) ListPublicPages(limit int64) ([]repository.PublicPageSummary, error) {

@@ -287,12 +287,28 @@ func (p *PageRepository) GetPageByIdUnscoped(id string) (*mongomodels.PageMongo,
 }
 
 type PublicPageSummary struct {
-	Title     string        `bson:"title"`
-	Icon      *string       `bson:"icon,omitempty"`
-	Slug      string        `bson:"slug"`
-	LinkCount int           `bson:"linkCount"`
-	UpdatedAt time.Time     `bson:"updatedAt"`
-	Id        bson.ObjectID `bson:"_id"`
+	Title           string        `bson:"title"`
+	Icon            *string       `bson:"icon,omitempty"`
+	Slug            string        `bson:"slug"`
+	CreatorUsername string        `bson:"creatorUsername"`
+	LinkCount       int           `bson:"linkCount"`
+	UpdatedAt       time.Time     `bson:"updatedAt"`
+	Id              bson.ObjectID `bson:"_id"`
+}
+
+const UnknownCreatorUsername = "Unknown creator"
+
+func creatorLookupStage() bson.D {
+	return bson.D{{Key: "$lookup", Value: bson.M{
+		"from": "User",
+		"let":  bson.M{"ownerId": "$ownerId"},
+		"pipeline": bson.A{
+			bson.M{"$match": bson.M{"$expr": bson.M{"$eq": bson.A{"$_id", "$$ownerId"}}}},
+			bson.M{"$project": bson.M{"_id": 0, "username": 1}},
+			bson.M{"$limit": 1},
+		},
+		"as": "creator",
+	}}}
 }
 
 // ListPublicPages lists recently-updated public pages across every user, for
@@ -313,12 +329,14 @@ func (p *PageRepository) ListPublicPages(limit int64) ([]PublicPageSummary, erro
 			"foreignField": "pageId",
 			"as":           "blocks",
 		}}},
+		creatorLookupStage(),
 		{{Key: "$project", Value: bson.M{
-			"title":     1,
-			"icon":      1,
-			"slug":      1,
-			"updatedAt": 1,
-			"linkCount": bson.M{"$size": "$blocks"},
+			"title":           1,
+			"icon":            1,
+			"slug":            1,
+			"updatedAt":       1,
+			"creatorUsername": bson.M{"$ifNull": bson.A{bson.M{"$arrayElemAt": bson.A{"$creator.username", 0}}, UnknownCreatorUsername}},
+			"linkCount":       bson.M{"$size": "$blocks"},
 		}}},
 	}
 
@@ -358,12 +376,14 @@ func (p *PageRepository) GetPageSummariesByIds(ids []bson.ObjectID) ([]PublicPag
 			"foreignField": "pageId",
 			"as":           "blocks",
 		}}},
+		creatorLookupStage(),
 		{{Key: "$project", Value: bson.M{
-			"title":     1,
-			"icon":      1,
-			"slug":      1,
-			"updatedAt": 1,
-			"linkCount": bson.M{"$size": "$blocks"},
+			"title":           1,
+			"icon":            1,
+			"slug":            1,
+			"updatedAt":       1,
+			"creatorUsername": bson.M{"$ifNull": bson.A{bson.M{"$arrayElemAt": bson.A{"$creator.username", 0}}, UnknownCreatorUsername}},
+			"linkCount":       bson.M{"$size": "$blocks"},
 		}}},
 	}
 

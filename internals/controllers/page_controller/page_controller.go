@@ -196,7 +196,7 @@ func (c *PageController) UnpublishPage(ctx *gin.Context) {
 func (c *PageController) GetPublicPage(ctx *gin.Context) {
 	slug := ctx.Param("slug")
 
-	page, err := c.pageService.GetPublicPage(slug)
+	page, err := c.pageService.GetPublicPageWithCreator(slug)
 
 	if err != nil {
 		c.respondWithError(ctx, err)
@@ -205,7 +205,8 @@ func (c *PageController) GetPublicPage(ctx *gin.Context) {
 
 	// The collaborator list is only for the owner's Share dialog — anyone with
 	// the link shouldn't be able to see who else was specifically invited.
-	response := ToPageResponseDTO(*page)
+	response := ToPageResponseDTO(*page.Page)
+	response.CreatorUsername = page.CreatorUsername
 	response.CollaboratorEmails = nil
 
 	ctx.JSON(http.StatusOK, response)
@@ -292,11 +293,12 @@ func (c *PageController) ListPublicPages(ctx *gin.Context) {
 
 	for i, summary := range summaries {
 		response[i] = dto.PublicPageSummaryDTO{
-			Id:        summary.Id.Hex(),
-			Title:     summary.Title,
-			Icon:      summary.Icon,
-			Slug:      summary.Slug,
-			LinkCount: summary.LinkCount,
+			Id:              summary.Id.Hex(),
+			Title:           summary.Title,
+			Icon:            summary.Icon,
+			Slug:            summary.Slug,
+			CreatorUsername: summary.CreatorUsername,
+			LinkCount:       summary.LinkCount,
 		}
 	}
 
@@ -341,11 +343,12 @@ func (c *PageController) ListBookmarks(ctx *gin.Context) {
 
 	for i, summary := range summaries {
 		response[i] = dto.PublicPageSummaryDTO{
-			Id:        summary.Id.Hex(),
-			Title:     summary.Title,
-			Icon:      summary.Icon,
-			Slug:      summary.Slug,
-			LinkCount: summary.LinkCount,
+			Id:              summary.Id.Hex(),
+			Title:           summary.Title,
+			Icon:            summary.Icon,
+			Slug:            summary.Slug,
+			CreatorUsername: summary.CreatorUsername,
+			LinkCount:       summary.LinkCount,
 		}
 	}
 
