@@ -65,6 +65,32 @@ func (u *UserRepository) FindUserById(id string) (*mongomodels.UserMongo, error)
 	return &user, nil
 }
 
+func (u *UserRepository) FindUsernameById(id string) (string, error) {
+	objectId, err := bson.ObjectIDFromHex(id)
+
+	if err != nil {
+		return "", customerrors.ErrorUserNotFound
+	}
+
+	var user struct {
+		Username string `bson:"username"`
+	}
+	err = u.client.Database("Auth").Collection("User").FindOne(
+		u.ctx,
+		bson.M{"_id": objectId},
+		options.FindOne().SetProjection(bson.M{"_id": 0, "username": 1}),
+	).Decode(&user)
+
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return "", customerrors.ErrorUserNotFound
+		}
+		return "", err
+	}
+
+	return user.Username, nil
+}
+
 func (u *UserRepository) FindUserByEmail(email string) (*mongomodels.UserMongo, error) {
 	users, err := u.findUsersByEmail(email, true)
 	if err != nil {

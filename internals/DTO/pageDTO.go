@@ -22,6 +22,7 @@ type SetCollaboratorsDTO struct {
 
 type PageResponseDTO struct {
 	Id                 string   `json:"id"`
+	CreatorUsername    string   `json:"creatorUsername,omitempty"`
 	ParentPageId       *string  `json:"parentPageId,omitempty"`
 	Title              string   `json:"title"`
 	Icon               *string  `json:"icon,omitempty"`
@@ -42,11 +43,12 @@ type SetCollaboratorsResponseDTO struct {
 }
 
 type PublicPageSummaryDTO struct {
-	Id        string  `json:"id"`
-	Title     string  `json:"title"`
-	Icon      *string `json:"icon,omitempty"`
-	Slug      string  `json:"slug"`
-	LinkCount int     `json:"linkCount"`
+	Id              string  `json:"id"`
+	Title           string  `json:"title"`
+	Icon            *string `json:"icon,omitempty"`
+	Slug            string  `json:"slug"`
+	CreatorUsername string  `json:"creatorUsername"`
+	LinkCount       int     `json:"linkCount"`
 }
 
 type UserSummaryDTO struct {
