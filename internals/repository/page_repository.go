@@ -296,6 +296,12 @@ type PublicPageSummary struct {
 	Id              bson.ObjectID `bson:"_id"`
 }
 
+type PublicPageListOptions struct {
+	Limit  int64
+	Offset int64
+	Query  string
+}
+
 const UnknownCreatorUsername = "Unknown creator"
 
 func creatorLookupStage() bson.D {
@@ -314,33 +320,69 @@ func creatorLookupStage() bson.D {
 // ListPublicPages lists recently-updated public pages across every user, for
 // the "explore" preview shown to logged-out visitors. No ownership scoping —
 // these pages are, by definition, already publicly viewable via their slug.
-func (p *PageRepository) ListPublicPages(limit int64) ([]PublicPageSummary, error) {
+func (p *PageRepository) ListPublicPages(listOptions PublicPageListOptions) ([]PublicPageSummary, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{
 			"visibility": "public",
 			"deletedAt":  bson.M{"$exists": false},
 			"slug":       bson.M{"$exists": true},
 		}}},
-		{{Key: "$sort", Value: bson.M{"updatedAt": -1}}},
-		{{Key: "$limit", Value: limit}},
-		{{Key: "$lookup", Value: bson.M{
+	}
+
+	if listOptions.Query != "" {
+		pattern := regexp.QuoteMeta(listOptions.Query)
+		pipeline = append(pipeline,
+			creatorLookupStage(),
+			bson.D{{Key: "$match", Value: bson.M{"$or": bson.A{
+				bson.M{"title": bson.M{"$regex": pattern, "$options": "i"}},
+				bson.M{"creator.username": bson.M{"$regex": pattern, "$options": "i"}},
+			}}}},
+		)
+	}
+
+	pipeline = append(pipeline,
+		bson.D{{Key: "$sort", Value: bson.D{{Key: "updatedAt", Value: -1}, {Key: "_id", Value: -1}}}},
+	)
+	if listOptions.Offset > 0 {
+		pipeline = append(pipeline, bson.D{{Key: "$skip", Value: listOptions.Offset}})
+	}
+	pipeline = append(pipeline,
+		bson.D{{Key: "$limit", Value: listOptions.Limit}},
+		bson.D{{Key: "$lookup", Value: bson.M{
 			"from":         "Block",
 			"localField":   "_id",
 			"foreignField": "pageId",
-			"as":           "blocks",
+			"pipeline": mongo.Pipeline{
+				{{Key: "$count", Value: "count"}},
+			},
+			"as": "blockCounts",
 		}}},
-		creatorLookupStage(),
-		{{Key: "$project", Value: bson.M{
+	)
+	if listOptions.Query == "" {
+		pipeline = append(pipeline, creatorLookupStage())
+	}
+	pipeline = append(pipeline,
+		bson.D{{Key: "$project", Value: bson.M{
 			"title":           1,
 			"icon":            1,
 			"slug":            1,
 			"updatedAt":       1,
 			"creatorUsername": bson.M{"$ifNull": bson.A{bson.M{"$arrayElemAt": bson.A{"$creator.username", 0}}, UnknownCreatorUsername}},
-			"linkCount":       bson.M{"$size": "$blocks"},
+			"linkCount": bson.M{"$ifNull": bson.A{
+				bson.M{"$arrayElemAt": bson.A{"$blockCounts.count", 0}},
+				0,
+			}},
 		}}},
+	)
+
+	aggregateCtx := p.ctx
+	if listOptions.Query != "" {
+		var cancel context.CancelFunc
+		aggregateCtx, cancel = context.WithTimeout(p.ctx, 4*time.Second)
+		defer cancel()
 	}
 
-	cursor, err := p.collection().Aggregate(p.ctx, pipeline)
+	cursor, err := p.collection().Aggregate(aggregateCtx, pipeline)
 
 	if err != nil {
 		return nil, err
@@ -348,7 +390,7 @@ func (p *PageRepository) ListPublicPages(limit int64) ([]PublicPageSummary, erro
 
 	var summaries []PublicPageSummary
 
-	if err := cursor.All(p.ctx, &summaries); err != nil {
+	if err := cursor.All(aggregateCtx, &summaries); err != nil {
 		return nil, err
 	}
 
