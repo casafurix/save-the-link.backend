@@ -40,8 +40,22 @@ func (b *BlockRepository) CreateBlock(pageId string, ownerId string, block *mong
 		return nil, err
 	}
 
+	return b.CreateBlockForAuthorizedPage(page.Id, block)
+}
+
+func (b *BlockRepository) AuthorizePageForEdit(pageId string, requesterId string) (*mongomodels.PageMongo, error) {
+	return b.pageRepository.GetPageForCollaborator(pageId, requesterId)
+}
+
+// CreateBlockForAuthorizedPage inserts without another access lookup. Callers must
+// have authorized the requester for this page in the same operation.
+func (b *BlockRepository) CreateBlockForAuthorizedPage(pageId bson.ObjectID, block *mongomodels.BlockMongo) (*mongomodels.BlockMongo, error) {
+	return b.CreateBlockForAuthorizedPageContext(b.ctx, pageId, block)
+}
+
+func (b *BlockRepository) CreateBlockForAuthorizedPageContext(ctx context.Context, pageId bson.ObjectID, block *mongomodels.BlockMongo) (*mongomodels.BlockMongo, error) {
 	now := time.Now()
-	block.PageId = page.Id
+	block.PageId = pageId
 	block.Order = float64(now.UnixNano())
 	block.CreatedAt = now
 	block.UpdatedAt = now
@@ -50,7 +64,7 @@ func (b *BlockRepository) CreateBlock(pageId string, ownerId string, block *mong
 		block.Tags = []string{}
 	}
 
-	result, err := b.collection().InsertOne(b.ctx, block)
+	result, err := b.collection().InsertOne(ctx, block)
 
 	if err != nil {
 		return nil, err
@@ -59,6 +73,18 @@ func (b *BlockRepository) CreateBlock(pageId string, ownerId string, block *mong
 	block.Id = result.InsertedID.(bson.ObjectID)
 
 	return block, nil
+}
+
+func (b *BlockRepository) InsertImportedBlocks(blocks []mongomodels.BlockMongo) error {
+	if len(blocks) == 0 {
+		return nil
+	}
+	documents := make([]any, len(blocks))
+	for i := range blocks {
+		documents[i] = blocks[i]
+	}
+	_, err := b.collection().InsertMany(b.ctx, documents)
+	return err
 }
 
 func (b *BlockRepository) GetBlocksByPage(pageId string, ownerId string) ([]mongomodels.BlockMongo, error) {

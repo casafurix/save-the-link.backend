@@ -20,6 +20,10 @@ var ErrorBlockNotFound = errors.New("Link not found")
 
 var ErrorInvalidBlock = errors.New("Invalid link data")
 
+var ErrorDuplicateURL = errors.New("This URL is already saved on this page")
+
 var ErrorInvalidURL = errors.New("That URL couldn't be reached")
 
 var ErrorCannotBookmarkOwnPage = errors.New("You can't bookmark your own page")
+
+var ErrorInvalidWorkspace = errors.New("Invalid workspace archive")

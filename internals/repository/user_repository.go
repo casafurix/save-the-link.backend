@@ -31,7 +31,7 @@ func NewUserRepository(client *mongo.Client, ctx context.Context, passwordManage
 func (u *UserRepository) CheckUserExists(email string) (bool, error) {
 	collection := u.client.Database("Auth").Collection("User")
 	var user mongomodels.UserMongo
-	err := collection.FindOne(u.ctx, bson.M{"email": email}).Decode(&user)
+	err := collection.FindOne(u.ctx, bson.M{"email": email}, options.FindOne().SetCollation(emailCollation())).Decode(&user)
 
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
@@ -66,19 +66,30 @@ func (u *UserRepository) FindUserById(id string) (*mongomodels.UserMongo, error)
 }
 
 func (u *UserRepository) FindUserByEmail(email string) (*mongomodels.UserMongo, error) {
-	collection := u.client.Database("Auth").Collection("User")
-
-	var user mongomodels.UserMongo
-	err := collection.FindOne(u.ctx, bson.M{"email": email}).Decode(&user)
-
+	users, err := u.findUsersByEmail(email, true)
 	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, customerrors.ErrorUserNotFound
-		}
 		return nil, err
 	}
+	if len(users) != 1 {
+		return nil, customerrors.ErrorUserNotFound
+	}
+	return &users[0], nil
+}
 
-	return &user, nil
+func (u *UserRepository) findUsersByEmail(email string, caseInsensitive bool) ([]mongomodels.UserMongo, error) {
+	findOptions := options.Find().SetLimit(2)
+	if caseInsensitive {
+		findOptions.SetCollation(emailCollation())
+	}
+	cursor, err := u.client.Database("Auth").Collection("User").Find(u.ctx, bson.M{"email": email}, findOptions)
+	if err != nil {
+		return nil, err
+	}
+	var users []mongomodels.UserMongo
+	if err := cursor.All(u.ctx, &users); err != nil {
+		return nil, err
+	}
+	return users, nil
 }
 
 // SearchUsersByEmail is used for the collaborator autocomplete in the share
@@ -172,40 +183,49 @@ func (u *UserRepository) DeleteUser(id string) error {
 }
 
 func (u *UserRepository) LoginUser(email string, password string) (*mongomodels.UserMongo, error) {
-	collection := u.client.Database("Auth").Collection("User")
-
-	var user mongomodels.UserMongo
-	err := collection.FindOne(u.ctx, bson.M{"email": email}).Decode(&user)
-
+	users, err := u.findUsersByEmail(email, false)
 	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, customerrors.ErrorUserNotFound
-		}
 		return nil, err
 	}
+	if len(users) > 1 {
+		return nil, customerrors.InvalidCredentials
+	}
+	if len(users) == 0 {
+		users, err = u.findUsersByEmail(email, true)
+		if err != nil {
+			return nil, err
+		}
+		if len(users) == 0 {
+			return nil, customerrors.ErrorUserNotFound
+		}
+		if len(users) > 1 {
+			return nil, customerrors.InvalidCredentials
+		}
+	}
+	user := &users[0]
 
 	passwordMatch := u.passwordManager.ComparePassword(user.Password, password)
 
 	if passwordMatch == true {
-		return &user, nil
+		return user, nil
 	}
 
 	return nil, customerrors.InvalidCredentials
 }
 
+func emailCollation() *options.Collation {
+	return &options.Collation{Locale: "en", Strength: 2}
+}
+
 func (u *UserRepository) RegisterUserToDatabase(username string, email string, password string) (string, error) {
-
+	collection := u.client.Database("Auth").Collection("User")
 	exists, err := u.CheckUserExists(email)
-
 	if err != nil {
 		return "", err
 	}
-
-	if exists == true {
+	if exists {
 		return "", customerrors.UserAlreadyExists
 	}
-
-	collection := u.client.Database("Auth").Collection("User")
 
 	hashedPassword, err := u.passwordManager.HashPassword(password)
 
@@ -220,6 +240,10 @@ func (u *UserRepository) RegisterUserToDatabase(username string, email string, p
 	})
 
 	if err != nil {
+		var codedError interface{ HasErrorCode(int) bool }
+		if mongo.IsDuplicateKeyError(err) || (errors.As(err, &codedError) && codedError.HasErrorCode(11000)) {
+			return "", customerrors.UserAlreadyExists
+		}
 		return "", err
 	}
 

@@ -1,6 +1,7 @@
 package blockcontroller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -58,6 +59,11 @@ func (c *BlockController) respondWithError(ctx *gin.Context, err error) {
 		ctx.AbortWithStatusJSON(http.StatusForbidden, gin.H{"message": err.Error()})
 	case errors.Is(err, customerrors.ErrorInvalidBlock), errors.Is(err, customerrors.ErrorInvalidPage):
 		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	case errors.Is(err, customerrors.ErrorDuplicateURL):
+		ctx.AbortWithStatusJSON(http.StatusConflict, gin.H{
+			"code":    "duplicate_url",
+			"message": err.Error(),
+		})
 	default:
 		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"message": fmt.Sprintf("%v", err),
@@ -76,7 +82,7 @@ func (c *BlockController) CreateBlock(ctx *gin.Context) {
 		return
 	}
 
-	block, err := c.blockService.CreateBlock(ctx.Request.Context(), pageId, ownerId, body.URL)
+	block, err := c.blockService.CreateBlock(ctx.Request.Context(), pageId, ownerId, body.URL, body.AllowDuplicate)
 
 	if err != nil {
 		c.respondWithError(ctx, err)
@@ -84,6 +90,40 @@ func (c *BlockController) CreateBlock(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusCreated, ToBlockResponseDTO(*block))
+}
+
+func (c *BlockController) ImportBlocks(ctx *gin.Context) {
+	requesterId := ctx.MustGet("userId").(string)
+	pageId := ctx.Param("id")
+	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, 512<<10)
+	var body dto.ImportBlocksDTO
+	if err := ctx.ShouldBindJSON(&body); err != nil || len(body.URLs) == 0 || len(body.URLs) > 100 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": "validation_error", "message": "urls must contain between 1 and 100 items"})
+		return
+	}
+
+	requestCtx, cancel := context.WithTimeout(ctx.Request.Context(), 3*time.Minute)
+	defer cancel()
+	result, err := c.blockService.ImportURLs(requestCtx, pageId, requesterId, body.URLs)
+	if err != nil {
+		c.respondWithError(ctx, err)
+		return
+	}
+	response := dto.ImportBlocksResponseDTO{
+		Created:  make([]dto.BlockResponseDTO, len(result.Created)),
+		Warnings: make([]dto.ImportBlockIssueDTO, len(result.Warnings)),
+		Failed:   make([]dto.ImportBlockIssueDTO, len(result.Failed)),
+	}
+	for i, block := range result.Created {
+		response.Created[i] = ToBlockResponseDTO(block)
+	}
+	for i, issue := range result.Warnings {
+		response.Warnings[i] = dto.ImportBlockIssueDTO{Index: issue.Index, URL: issue.URL, Code: issue.Code, Message: issue.Message}
+	}
+	for i, issue := range result.Failed {
+		response.Failed[i] = dto.ImportBlockIssueDTO{Index: issue.Index, URL: issue.URL, Code: issue.Code, Message: issue.Message}
+	}
+	ctx.JSON(http.StatusOK, response)
 }
 
 func (c *BlockController) ListBlocks(ctx *gin.Context) {

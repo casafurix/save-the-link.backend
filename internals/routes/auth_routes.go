@@ -14,12 +14,19 @@ func AuthRoutes(r *gin.Engine, authController *authcontroller.AuthController) {
 		var userDto dto.UserDTO
 
 		if err := ctx.ShouldBindBodyWithJSON(&userDto); err != nil {
-			ctx.JSON(
-				http.StatusBadRequest,
-				gin.H{
-					"error": err.Error(),
-				},
-			)
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"code":    "validation_error",
+				"message": "invalid registration request",
+			})
+			return
+		}
+		userDto.Normalize()
+		if fields := userDto.ValidationErrors(); len(fields) > 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"code":    "validation_error",
+				"message": "invalid registration request",
+				"fields":  fields,
+			})
 			return
 		}
 

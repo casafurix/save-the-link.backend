@@ -129,17 +129,28 @@ later, with no need to re-find the original share link:
 
 ### Prerequisites
 
-- Node.js (v20+)
-- Go (1.20+)
-- A MongoDB connection string (local or Atlas)
+- Node.js (v22.22+)
+- Docker Desktop
 
 ### Backend
 
+`compose.yaml` is for local development only. Production uses an externally
+managed MongoDB and process environment variables; it does not use this Compose
+stack.
+
 ```bash
 cd ../save-the-link.backend
-# copy .env.sample to .env and fill in your MongoDB credentials
-go run ./cmd/api/main.go
+cp .env.sample .env
+# Set mongo_connection_string=mongodb://mongo:27017 and choose a local jwt_secret.
+docker compose up --build
 ```
+
+Workspace imports are append-only, and imported pages are always private and
+unshared. The complete archive is validated before any writes. Imports do not use
+MongoDB transactions so local development can keep using standalone MongoDB;
+known imported page IDs are removed on a write failure. Cleanup is best-effort,
+so an outage that also prevents the compensating deletes can still require manual
+cleanup before retrying.
 
 ### Frontend
 
@@ -149,3 +160,9 @@ npm run dev
 ```
 
 Then open `http://localhost:5173`.
+
+For local development, create `.env.local` in the frontend with:
+
+```bash
+VITE_SERVER_HOST=http://localhost:8080
+```

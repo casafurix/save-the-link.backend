@@ -7,6 +7,7 @@ import (
 
 func BlockRoutes(r gin.IRoutes, blockController *blockcontroller.BlockController) {
 	r.POST("/pages/:id/blocks", blockController.CreateBlock)
+	r.POST("/pages/:id/blocks/import", blockController.ImportBlocks)
 	r.GET("/pages/:id/blocks", blockController.ListBlocks)
 	r.PATCH("/blocks/:blockId", blockController.UpdateBlock)
 	r.DELETE("/blocks/:blockId", blockController.DeleteBlock)

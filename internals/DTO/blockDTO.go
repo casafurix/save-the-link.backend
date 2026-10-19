@@ -1,7 +1,25 @@
 package dto
 
 type CreateBlockDTO struct {
-	URL string `json:"url" binding:"required"`
+	URL            string `json:"url" binding:"required"`
+	AllowDuplicate bool   `json:"allowDuplicate"`
+}
+
+type ImportBlocksDTO struct {
+	URLs []string `json:"urls"`
+}
+
+type ImportBlockIssueDTO struct {
+	Index   int    `json:"index"`
+	URL     string `json:"url"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type ImportBlocksResponseDTO struct {
+	Created  []BlockResponseDTO    `json:"created"`
+	Warnings []ImportBlockIssueDTO `json:"warnings"`
+	Failed   []ImportBlockIssueDTO `json:"failed"`
 }
 
 type UpdateBlockDTO struct {
