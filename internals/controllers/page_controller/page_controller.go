@@ -4,12 +4,16 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	dto "github.com/smil-thakur/save-the-link/internals/DTO"
 	customerrors "github.com/smil-thakur/save-the-link/internals/custom_errors"
 	mongomodels "github.com/smil-thakur/save-the-link/internals/mongo_models"
+	"github.com/smil-thakur/save-the-link/internals/repository"
 	pageservice "github.com/smil-thakur/save-the-link/internals/services/page_service"
 )
 
@@ -282,7 +286,14 @@ func (c *PageController) SetCollaborators(ctx *gin.Context) {
 }
 
 func (c *PageController) ListPublicPages(ctx *gin.Context) {
-	summaries, err := c.pageService.ListPublicPages(12)
+	options, err := publicPageListOptions(ctx)
+
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	summaries, err := c.pageService.ListPublicPages(options)
 
 	if err != nil {
 		c.respondWithError(ctx, err)
@@ -303,6 +314,58 @@ func (c *PageController) ListPublicPages(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, response)
+}
+
+const (
+	defaultPublicPageLimit  = int64(12)
+	maxPublicPageLimit      = int64(50)
+	maxPublicPageOffset     = int64(10_000) + maxPublicPageLimit
+	maxPublicPageQueryRunes = 100
+)
+
+func publicPageListOptions(ctx *gin.Context) (repository.PublicPageListOptions, error) {
+	limit, err := parseBoundedQueryInt(ctx, "limit", defaultPublicPageLimit, 1, maxPublicPageLimit)
+	if err != nil {
+		return repository.PublicPageListOptions{}, err
+	}
+
+	offset, err := parseBoundedQueryInt(ctx, "offset", 0, 0, maxPublicPageOffset)
+	if err != nil {
+		return repository.PublicPageListOptions{}, err
+	}
+
+	rawQuery := ctx.Query("q")
+	if !utf8.ValidString(rawQuery) {
+		return repository.PublicPageListOptions{}, errors.New("q must be valid UTF-8")
+	}
+
+	query := strings.TrimSpace(rawQuery)
+	queryRunes := utf8.RuneCountInString(query)
+	if queryRunes == 1 {
+		return repository.PublicPageListOptions{}, errors.New("q must be at least 2 characters")
+	}
+	if queryRunes > maxPublicPageQueryRunes {
+		return repository.PublicPageListOptions{}, errors.New("q must be at most 100 characters")
+	}
+
+	return repository.PublicPageListOptions{Limit: limit, Offset: offset, Query: query}, nil
+}
+
+func parseBoundedQueryInt(ctx *gin.Context, name string, defaultValue, minValue, maxValue int64) (int64, error) {
+	values, present := ctx.Request.URL.Query()[name]
+	if !present {
+		return defaultValue, nil
+	}
+	if len(values) != 1 || values[0] == "" {
+		return 0, fmt.Errorf("%s must be an integer between %d and %d", name, minValue, maxValue)
+	}
+
+	value, err := strconv.ParseInt(values[0], 10, 64)
+	if err != nil || value < minValue || value > maxValue {
+		return 0, fmt.Errorf("%s must be an integer between %d and %d", name, minValue, maxValue)
+	}
+
+	return value, nil
 }
 
 func (c *PageController) BookmarkPage(ctx *gin.Context) {

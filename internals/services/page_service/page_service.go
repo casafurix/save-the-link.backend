@@ -191,8 +191,8 @@ func (s *PageService) GetPublicPageWithCreator(slug string) (*PublicPage, error)
 	return &PublicPage{Page: page, CreatorUsername: creatorUsername}, nil
 }
 
-func (s *PageService) ListPublicPages(limit int64) ([]repository.PublicPageSummary, error) {
-	return s.pageRepository.ListPublicPages(limit)
+func (s *PageService) ListPublicPages(options repository.PublicPageListOptions) ([]repository.PublicPageSummary, error) {
+	return s.pageRepository.ListPublicPages(options)
 }
 
 // SetCollaborators resolves each email to a registered user (silently dropping
